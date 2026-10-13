@@ -7,6 +7,12 @@
       <ApplicationPrograms>
         <ApplicationProgram>
           <Static>
+            <ParameterTypes>
+              <!-- Reihenfolge der ACL-Türliste (siehe Konsole "wis doors"). -->
+              <ParameterType Id="%AID%_PT-WISStationNumber" Name="WISStationNumber">
+                <TypeNumber SizeInBit="8" Type="unsignedInt" minInclusive="1" maxInclusive="16" />
+              </ParameterType>
+            </ParameterTypes>
             <Parameters>
               <!-- Channel name -->
               <Parameter Id="%AID%_P-%TT%%CC%000" Name="Channel%C%Name" ParameterType="%AID%_PT-Text40Byte" Text="Beschreibung" Value="" />
@@ -19,6 +25,12 @@
 
               <!-- TypeSelect: kein Union, keine Memory-Referenz -> nur in ETS gespeichert, nicht auf dem Geraet -->
               <Parameter Id="%AID%_P-%TT%%CC%997" Name="Ch%C%TypeSelect" ParameterType="%AID%_PT-WISChannelTypeSelect" Text="Kanaltyp" Value="1" />
+
+              <!-- Stationsnummer (Byte 1): Reihenfolge der Aussenstation in der ACL-Tuerliste -->
+              <Union SizeInBit="8">
+                <Memory CodeSegment="%MID%" Offset="1" BitOffset="0" />
+                <Parameter Id="%AID%_UP-%TT%%CC%002" Name="CH%C%StationNumber" ParameterType="%AID%_PT-WISStationNumber" Offset="0" BitOffset="0" Text="Stationsnummer" Value="1" />
+              </Union>
             </Parameters>
             <ParameterRefs>
               <!-- Channel name -->
@@ -27,6 +39,8 @@
               <ParameterRef Id="%AID%_UP-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_UP-%TT%%CC%001" />
               <!-- TypeSelect -->
               <ParameterRef Id="%AID%_P-%TT%%CC%997_R-%TT%%CC%99701" RefId="%AID%_P-%TT%%CC%997" />
+              <!-- Stationsnummer -->
+              <ParameterRef Id="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" RefId="%AID%_UP-%TT%%CC%002" />
             </ParameterRefs>
             <ParameterCalculations>
               <!-- Haelt Haupttyp (Kanalauswahl) und TypeSelect (Kanal-Tab) synchron -->
@@ -39,6 +53,18 @@
                 </RParameters>
               </ParameterCalculation>
             </ParameterCalculations>
+            <ComObjectTable>
+              <!-- Klingeln -->
+              <ComObject Id="%AID%_O-%TT%%CC%000" Number="%K0%" Name="CH%C%Ring" Text="Klingeln" FunctionText="" ObjectSize="1 Bit" DatapointType="DPST-1-1" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" />
+              <!-- Name der Station -->
+              <ComObject Id="%AID%_O-%TT%%CC%001" Number="%K1%" Name="CH%C%StationName" Text="Name der Station" FunctionText="" ObjectSize="14 Bytes" DatapointType="DPST-16-1" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" />
+            </ComObjectTable>
+            <ComObjectRefs>
+              <!-- Klingeln -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" RefId="%AID%_O-%TT%%CC%000" Name="CH%C%Ring" Text="{{0:Aussenstation %C%}}: Klingeln" FunctionText="Aussenstation %C%: Ausgang, Klingeln" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" Priority="High" />
+              <!-- Name der Station -->
+              <ComObjectRef Id="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" RefId="%AID%_O-%TT%%CC%001" Name="CH%C%StationName" Text="{{0:Aussenstation %C%}}: Name der Station" FunctionText="Aussenstation %C%: Ausgang, Text" TextParameterRefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" Priority="Low" />
+            </ComObjectRefs>
           </Static>
           <Dynamic>
             <ChannelIndependentBlock>
@@ -71,7 +97,20 @@
                     <ParameterRefRef RefId="%AID%_P-%TT%%CC%000_R-%TT%%CC%00001" HelpContext="BASE-ChannelName" />
                     <!-- Kanaltyp (ohne "Deaktiviert", synchron zur Kanalauswahl) -->
                     <ParameterRefRef RefId="%AID%_P-%TT%%CC%997_R-%TT%%CC%99701" HelpContext="WIS-Kanaltyp" />
-                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing, Stationsnummer und Kommunikationsobjekte folgen in einem späteren Schritt." UIHint="Information" />
+                    <!-- Stationsnummer -->
+                    <ParameterRefRef RefId="%AID%_UP-%TT%%CC%002_R-%TT%%CC%00201" HelpContext="WIS-Stationsnummer" />
+                    <ParameterSeparator Id="%AID%_PS-nnn" Text="Reihenfolge der Aussenstation in der Tuerliste des Pairings (siehe Konsole &quot;wis doors&quot;)." UIHint="Information" />
+
+                    <ComObjectRefRef RefId="%AID%_O-%TT%%CC%000_R-%TT%%CC%00001" />
+                    <!-- "Name der Station" ist modulweit über das Allgemein-Tab zuschaltbar
+                         (WISUseStationName, in WelcomeIPSip.share.xml definiert); dieses
+                         Fragment wird dort per op:include eingebunden, die Referenz auf die
+                         feste, nicht kanalindizierte ParamRefId ist daher gültig. -->
+                    <choose ParamRefId="%AID%_UP-%TT%00003_R-%TT%0000301">
+                      <when test="=1">
+                        <ComObjectRefRef RefId="%AID%_O-%TT%%CC%001_R-%TT%%CC%00101" />
+                      </when>
+                    </choose>
                   </ParameterBlock>
                 </when>
               </choose>

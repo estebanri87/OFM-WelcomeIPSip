@@ -19,20 +19,126 @@
 									<Enumeration Text="Außenstation" Value="1" Id="%ENID%" />
 								</TypeRestriction>
 							</ParameterType>
+							<!-- Reihenfolge = Wis::ClientTypeChoice -->
+							<ParameterType Id="%AID%_PT-WISClientType" Name="WISClientType">
+								<TypeRestriction Base="Value" SizeInBit="8" UIHint="DropDown">
+									<Enumeration Text="free@home next" Value="0" Id="%ENID%" />
+									<Enumeration Text="Welcome" Value="1" Id="%ENID%" />
+								</TypeRestriction>
+							</ParameterType>
+							<ParameterType Id="%AID%_PT-WISRingMode" Name="WISRingMode">
+								<TypeRestriction Base="Value" SizeInBit="8" UIHint="DropDown">
+									<Enumeration Text="Impuls" Value="0" Id="%ENID%" />
+									<Enumeration Text="Dauer während des Klingelns" Value="1" Id="%ENID%" />
+								</TypeRestriction>
+							</ParameterType>
+							<!-- MyBuildings-Zugangsdaten; Text40Byte (gemeinsamer Typ) reicht für
+							     Client-Name, Gateway-UUID und Panel-Adresse nicht für E-Mail-Adressen. -->
+							<ParameterType Id="%AID%_PT-WISText64" Name="WISText64">
+								<TypeText SizeInBit="512" />
+							</ParameterType>
 						</ParameterTypes>
+
 						<Parameters>
+							<!-- Offset 0, Bit 0: Modulliste in OpenKNX/Common, frei lassen. -->
+							<Union SizeInBit="8">
+								<Memory CodeSegment="%MID%" Offset="1" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00001" Name="WISClientType" ParameterType="%AID%_PT-WISClientType" Offset="0" BitOffset="0" Text="App-Typ" Value="0" />
+							</Union>
+							<Union SizeInBit="8">
+								<Memory CodeSegment="%MID%" Offset="2" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00002" Name="WISRingMode" ParameterType="%AID%_PT-WISRingMode" Offset="0" BitOffset="0" Text="Klingelsignal" Value="1" />
+							</Union>
+							<Union SizeInBit="8">
+								<Memory CodeSegment="%MID%" Offset="3" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00003" Name="WISUseStationName" ParameterType="%AID%_PT-CheckBox" Offset="0" BitOffset="0" Text="Name der Station" Value="1" />
+								<Parameter Id="%AID%_UP-%TT%00004" Name="WISUseInternalCall" ParameterType="%AID%_PT-CheckBox" Offset="0" BitOffset="1" Text="Interner Ruf" Value="1" />
+							</Union>
+							<Union SizeInBit="512">
+								<Memory CodeSegment="%MID%" Offset="4" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00005" Name="WISUser" ParameterType="%AID%_PT-WISText64" Offset="0" BitOffset="0" Text="MyBuildings-Benutzername" Value="" />
+							</Union>
+							<Union SizeInBit="512">
+								<Memory CodeSegment="%MID%" Offset="68" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00006" Name="WISPassword" ParameterType="%AID%_PT-WISText64" Offset="0" BitOffset="0" Text="MyBuildings-Passwort" Value="" />
+							</Union>
+							<Union SizeInBit="320">
+								<Memory CodeSegment="%MID%" Offset="132" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00007" Name="WISGatewayUuid" ParameterType="%AID%_PT-Text40Byte" Offset="0" BitOffset="0" Text="Gateway-UUID (optional)" Value="" />
+							</Union>
+							<Union SizeInBit="320">
+								<Memory CodeSegment="%MID%" Offset="172" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00008" Name="WISPanelHost" ParameterType="%AID%_PT-Text40Byte" Offset="0" BitOffset="0" Text="Panel-IP/Hostname" Value="" />
+							</Union>
+							<Union SizeInBit="320">
+								<Memory CodeSegment="%MID%" Offset="212" BitOffset="0" />
+								<Parameter Id="%AID%_UP-%TT%00009" Name="WISClientName" ParameterType="%AID%_PT-Text40Byte" Offset="0" BitOffset="0" Text="Client-Name (im Portal)" Value="OpenKNX-WelcomeIPSip" />
+							</Union>
+							<!-- Offsets 252.. bleiben frei (Reserve für spätere Parameter). -->
 						</Parameters>
+
 						<ParameterRefs>
+							<ParameterRef Id="%AID%_UP-%TT%00001_R-%TT%0000101" RefId="%AID%_UP-%TT%00001" />
+							<ParameterRef Id="%AID%_UP-%TT%00002_R-%TT%0000201" RefId="%AID%_UP-%TT%00002" />
+							<ParameterRef Id="%AID%_UP-%TT%00003_R-%TT%0000301" RefId="%AID%_UP-%TT%00003" />
+							<ParameterRef Id="%AID%_UP-%TT%00004_R-%TT%0000401" RefId="%AID%_UP-%TT%00004" />
+							<ParameterRef Id="%AID%_UP-%TT%00005_R-%TT%0000501" RefId="%AID%_UP-%TT%00005" />
+							<ParameterRef Id="%AID%_UP-%TT%00006_R-%TT%0000601" RefId="%AID%_UP-%TT%00006" />
+							<ParameterRef Id="%AID%_UP-%TT%00007_R-%TT%0000701" RefId="%AID%_UP-%TT%00007" />
+							<ParameterRef Id="%AID%_UP-%TT%00008_R-%TT%0000801" RefId="%AID%_UP-%TT%00008" />
+							<ParameterRef Id="%AID%_UP-%TT%00009_R-%TT%0000901" RefId="%AID%_UP-%TT%00009" />
 						</ParameterRefs>
+
+						<ComObjectTable>
+							<ComObject Id="%AID%_O-%TT%00000" Number="0" Name="WISConnected" Text="Verbunden (SIP registriert)" FunctionText="WelcomeIPSip: Ausgang, Status" ObjectSize="1 Bit" DatapointType="DPST-1-11" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" />
+							<ComObject Id="%AID%_O-%TT%00001" Number="1" Name="WISDiag" Text="Diagnose" FunctionText="WelcomeIPSip: Ausgang, Text" ObjectSize="14 Bytes" DatapointType="DPST-16-1" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" />
+							<ComObject Id="%AID%_O-%TT%00002" Number="2" Name="WISInternalCall" Text="Interner Ruf" FunctionText="WelcomeIPSip: Ausgang, Status" ObjectSize="1 Bit" DatapointType="DPST-1-1" ReadFlag="Enabled" WriteFlag="Disabled" CommunicationFlag="Enabled" TransmitFlag="Enabled" UpdateFlag="Disabled" ReadOnInitFlag="Disabled" />
+							<ComObject Id="%AID%_O-%TT%00003" Number="3" Name="WISStartPairing" Text="Pairing starten" FunctionText="WelcomeIPSip: Eingang, Auslöser" ObjectSize="1 Bit" DatapointType="DPST-1-17" ReadFlag="Disabled" WriteFlag="Enabled" CommunicationFlag="Enabled" TransmitFlag="Disabled" UpdateFlag="Enabled" ReadOnInitFlag="Disabled" />
+						</ComObjectTable>
+
+						<ComObjectRefs>
+							<ComObjectRef Id="%AID%_O-%TT%00000_R-%TT%0000001" RefId="%AID%_O-%TT%00000" Priority="Low" />
+							<ComObjectRef Id="%AID%_O-%TT%00001_R-%TT%0000101" RefId="%AID%_O-%TT%00001" Priority="Low" />
+							<ComObjectRef Id="%AID%_O-%TT%00002_R-%TT%0000201" RefId="%AID%_O-%TT%00002" Priority="Low" />
+							<ComObjectRef Id="%AID%_O-%TT%00003_R-%TT%0000301" RefId="%AID%_O-%TT%00003" Priority="Low" />
+						</ComObjectRefs>
 					</Static>
+
 					<Dynamic>
 						<Channel Name="MainChannel%TT%" Text="WelcomeIP SIP" Number="%PREFIX%" Id="%AID%_CH-%TT%" Icon="lock-outline">
-							<ParameterBlock Id="%AID%_PB-nnn" Name="WISSettings" Text="Allgemein" Icon="cog-outline">
+							<ParameterBlock Id="%AID%_PB-nnn" Name="WISSettings" Text="Allgemein" Icon="cog-outline" HelpContext="WIS-Allgemein">
 								<ParameterSeparator Id="%AID%_PS-nnn" Text="Busch-Welcome IP über Cloud-Pairing und lokales SIP" UIHint="Headline" />
 								<ParameterSeparator Id="%AID%_PS-nnn" Text="Version: %ModuleVersion%" />
 								<ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
-								<ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Parameter und Kommunikationsobjekte folgen in einem späteren Schritt." UIHint="Information" />
+
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="MyBuildings-Zugangsdaten" UIHint="Headline" />
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Werden nur für das einmalige Pairing benötigt und danach nicht mehr verwendet. Liegen im ETS-Projekt im Klartext." UIHint="Information" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00005_R-%TT%0000501" HelpContext="WIS-Zugangsdaten" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00006_R-%TT%0000601" HelpContext="WIS-Zugangsdaten" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00009_R-%TT%0000901" HelpContext="WIS-Client-Name" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00001_R-%TT%0000101" HelpContext="WIS-App-Typ" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00007_R-%TT%0000701" HelpContext="WIS-Gateway-UUID" />
+
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Panel" UIHint="Headline" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00008_R-%TT%0000801" HelpContext="WIS-Panel-Adresse" />
+
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Klingeln" UIHint="Headline" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00002_R-%TT%0000201" HelpContext="WIS-Klingelsignal" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00003_R-%TT%0000301" HelpContext="WIS-Objekte" />
+								<ParameterRefRef IndentLevel="1" RefId="%AID%_UP-%TT%00004_R-%TT%0000401" HelpContext="WIS-Objekte" />
+								<choose ParamRefId="%AID%_UP-%TT%00004_R-%TT%0000401">
+									<when test="=1">
+										<ComObjectRefRef RefId="%AID%_O-%TT%00002_R-%TT%0000201" />
+									</when>
+								</choose>
+
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Verbindung" UIHint="Headline" />
+								<ComObjectRefRef RefId="%AID%_O-%TT%00000_R-%TT%0000001" />
+								<ComObjectRefRef RefId="%AID%_O-%TT%00001_R-%TT%0000101" />
+								<ComObjectRefRef RefId="%AID%_O-%TT%00003_R-%TT%0000301" />
 							</ParameterBlock>
+
+							<!-- Kanalauswahl: je Kanal eine einzeilige Tabelle (OpenKNX-Standard) -->
 							<ParameterBlock Id="%AID%_PB-nnn" Name="WISKanalauswahl" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="BASE-ChannelSelect">
 								<ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
 									<Rows>
@@ -49,6 +155,7 @@
 								</ParameterBlock>
 								<op:include href="WelcomeIPSip.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Settings']/*" type="template" prefix="WIS" IsInner="true" />
 							</ParameterBlock>
+
 							<op:include href="WelcomeIPSip.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Channel']/*" type="template" prefix="WIS" IsInner="true" />
 						</Channel>
 					</Dynamic>
