@@ -25,6 +25,18 @@ namespace
         }
         return "?";
     }
+
+    const char *linkPhaseName(Wis::LinkPhase phase)
+    {
+        switch (phase)
+        {
+            case Wis::LinkPhase::Disconnected: return "nicht verbunden";
+            case Wis::LinkPhase::Connecting: return "verbinde";
+            case Wis::LinkPhase::Registering: return "registriere";
+            case Wis::LinkPhase::Registered: return "registriert";
+        }
+        return "?";
+    }
 } // namespace
 
 WelcomeIPSipModule::WelcomeIPSipModule()
@@ -83,6 +95,15 @@ void WelcomeIPSipModule::printStatus()
         logInfoP("Integritaetscode fuer die App: %s", state.integrityDisplay);
     if (state.gatewayName[0]) logInfoP("Gateway: %s", state.gatewayName);
     if (state.phase == Wis::Phase::PAIRED) logInfoP("Aussenstationen: %u", (unsigned)state.doorCount);
+
+    Wis::LinkState link;
+    _link.snapshot(link, link.seq - 1);
+    logInfoP("SIP-Link: %s (%s)", linkPhaseName(link.phase), link.diag);
+    if (link.lastError[0]) logInfoP("SIP-Link letzter Fehler: %s", link.lastError);
+    if (link.phase == Wis::LinkPhase::Registered)
+        logInfoP("registriert seit %lu s, Heap-Minimum %u Byte", (unsigned long)((millis() - link.registeredSinceMs) / 1000),
+                 (unsigned)link.minFreeHeapSeen);
+    if (link.reconnectCount) logInfoP("Reconnects seit Start: %u", (unsigned)link.reconnectCount);
 }
 
 void WelcomeIPSipModule::printDoors()
@@ -116,6 +137,8 @@ void WelcomeIPSipModule::showHelp()
     openknx.console.printHelpLine("wis code", "Integritaetscode fuer die App");
     openknx.console.printHelpLine("wis pair [<Benutzername> <Passwort>]", "Pairing anstossen/fortsetzen");
     openknx.console.printHelpLine("wis unpair", "Pairing-Zustand loeschen");
+    openknx.console.printHelpLine("wis connect [<Panel-IP>]", "SIP-Registrierung starten (nach erfolgtem Pairing)");
+    openknx.console.printHelpLine("wis reregister", "SIP-Verbindung neu aufbauen");
 }
 
 bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
@@ -172,6 +195,42 @@ bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
         _pairing.begin(_testSettings); // no-op if the task is already running (first call wins)
         _pairing.enqueue(Wis::Pairing::CMD_PAIR);
         logInfoP("Pairing angestossen");
+        return true;
+    }
+    if (command.rfind("wis connect", 0) == 0)
+    {
+        // Platzhalter bis zur ETS-Einbindung (Schritt 5): die Panel-Adresse kommt per
+        // Konsole, die SIP-Zugangsdaten aus dem bereits abgeschlossenen Pairing.
+        if (command.size() > 12) _testPanelHost = command.substr(12);
+        if (_testPanelHost.empty())
+        {
+            logErrorP("wis connect <Panel-IP> (einmalig, vor der ETS-Einbindung)");
+            return true;
+        }
+        if (!_pairing.hasSipCredentials())
+        {
+            logErrorP("kein abgeschlossenes Pairing (siehe \"wis status\")");
+            return true;
+        }
+        Wis::PersistedPairing p;
+        if (!_pairing.store().load(p) || p.sipUsername.empty() || p.sipDomain.empty())
+        {
+            logErrorP("SIP-Zugangsdaten unvollstaendig");
+            return true;
+        }
+        Wis::LinkSettings settings;
+        settings.panelHost = _testPanelHost;
+        settings.sipUsername = p.sipUsername;
+        settings.sipPassword = p.sipPassword;
+        settings.sipDomain = p.sipDomain;
+        _link.begin(settings); // no-op if already running (first call wins)
+        logInfoP("SIP-Verbindung zu %s angestossen", _testPanelHost.c_str());
+        return true;
+    }
+    if (command == "wis reregister")
+    {
+        _link.enqueue(Wis::Link::CMD_REREGISTER);
+        logInfoP("Neuverbindung angefordert");
         return true;
     }
     return false;
