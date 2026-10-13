@@ -186,6 +186,28 @@ namespace Wis
         return sendRaw(req);
     }
 
+    bool SipClient::sendResponse(int code, const char *reason, const std::vector<std::string> &headers,
+                                 const std::string &body)
+    {
+        std::string resp;
+        resp.reserve(256 + body.size());
+        resp += "SIP/2.0 ";
+        resp += std::to_string(code);
+        resp += ' ';
+        resp += reason;
+        resp += "\r\n";
+        for (const auto &h : headers)
+        {
+            resp += h;
+            resp += "\r\n";
+        }
+        resp += "Content-Length: ";
+        resp += std::to_string(body.size());
+        resp += "\r\n\r\n";
+        resp += body;
+        return sendRaw(resp);
+    }
+
     bool SipClient::fillBuffer(uint32_t deadlineMs, bool &outTimedOut)
     {
         outTimedOut = false;

@@ -9,12 +9,13 @@
 #include <freertos/task.h>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 // Owns the one persistent SIP/TLS connection to the panel: connect, unregister any
-// stale binding, REGISTER, periodic refresh before expiry, a CRLF keepalive, and
-// reconnect with backoff on failure. Runs on its own FreeRTOS task, like WipSipPairing;
-// never touches a GroupObject. Ring detection (reading incoming INVITEs) is not part of
-// this step yet — see the plan's "Ruf-Erkennung" step.
+// stale binding, REGISTER, periodic refresh before expiry, a CRLF keepalive, reconnect
+// with backoff on failure, and ring detection (incoming INVITE/CANCEL/BYE). Runs on its
+// own FreeRTOS task, like WipSipPairing; never touches a GroupObject — the module reads
+// the ring table via snapshot() to set channel KOs once channels exist (ETS step).
 namespace Wis
 {
     enum class LinkPhase : uint8_t
@@ -25,6 +26,8 @@ namespace Wis
         Registered = 3,
     };
 
+    constexpr uint8_t kMaxOpenCalls = 4; // plan: "Tabelle offener Rufe nach Call-ID (max. 4)"
+
     struct LinkSettings
     {
         std::string panelHost;
@@ -32,6 +35,18 @@ namespace Wis
         std::string sipUsername;
         std::string sipPassword;
         std::string sipDomain;
+        // station_id values of the configured outdoor stations (from the ACL door
+        // list); an INVITE from any other caller is an "interner Ruf" and never sets
+        // ring[].active, matching the plan.
+        std::vector<std::string> doorStationIds;
+    };
+
+    struct RingSlot
+    {
+        bool active = false;
+        char stationId[24] = {};
+        bool internalCall = false;
+        uint32_t sinceMs = 0;
     };
 
     struct LinkState
@@ -43,6 +58,7 @@ namespace Wis
         uint32_t registeredSinceMs = 0;
         uint32_t minFreeHeapSeen = 0xFFFFFFFFu; // leak-watch, see the plan
         uint32_t reconnectCount = 0;
+        RingSlot ring[kMaxOpenCalls];
     };
 
     class Link
@@ -71,6 +87,15 @@ namespace Wis
         void teardown(const char *diag);
         void scheduleReconnect();
 
+        void handleIncomingRequest(const SipFrame &req);
+        void handleIncomingInvite(const SipFrame &req);
+        void handleIncomingCancel(const SipFrame &req);
+        void handleIncomingBye(const SipFrame &req);
+        void expireStaleCalls();
+        void sendResponseTo(const SipFrame &req, int code, const char *reason);
+        bool isKnownOutdoorStation(const std::string &stationId) const;
+        void publishRingTable();
+
         void publish();
         void setDiag(const char *diag);
         void fail(const char *diag, const std::string &error);
@@ -79,6 +104,22 @@ namespace Wis
         {
             CommandType type;
         };
+
+        // One entry per currently open (ringing) INVITE transaction we have not yet
+        // answered with a final response. Keeps the original INVITE's headers so a
+        // later CANCEL can be answered with a matching 487 on that same transaction.
+        struct OpenCall
+        {
+            std::string callId;
+            std::string via;
+            std::string from;
+            std::string to;
+            std::string cseq; // "N INVITE"
+            std::string stationId;
+            bool internalCall = false;
+            uint32_t startedAtMs = 0;
+        };
+        std::vector<OpenCall> _openCalls;
 
         LinkSettings _settings;
         SipClient _client;

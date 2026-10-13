@@ -20,6 +20,7 @@ namespace Wis
         const uint8_t kReconnectBackoffSteps = sizeof(kReconnectBackoffMs) / sizeof(kReconnectBackoffMs[0]);
         const uint32_t kRegisterExpiresSeconds = 600;
         const uint32_t kKeepaliveIntervalMs = 30000;
+        const uint32_t kRingTimeoutMs = 60000; // plan: "Fallback-Timeout ~60 s"
         const uint32_t kTaskStack = 8192;
 
         bool due(uint32_t at)
@@ -71,6 +72,37 @@ namespace Wis
             while (start < end && isspace((unsigned char)s[start])) start++;
             while (end > start && isspace((unsigned char)s[end - 1])) end--;
             return s.substr(start, end - start);
+        }
+
+        // User part of a From/To/Request-URI-style header value, e.g.
+        // "\"Name\" <sip:12345@domain;transport=tls>;tag=..." -> "12345". Falls back to
+        // treating the whole value as a bare "sip:user@..." or "user@..." form.
+        std::string sipUserPart(const std::string &headerValue)
+        {
+            std::string uri = headerValue;
+            const size_t lt = uri.find('<');
+            if (lt != std::string::npos)
+            {
+                const size_t gt = uri.find('>', lt + 1);
+                uri = uri.substr(lt + 1, gt == std::string::npos ? std::string::npos : gt - lt - 1);
+            }
+            const size_t sip = uri.find("sip:");
+            if (sip != std::string::npos) uri = uri.substr(sip + 4);
+            const size_t at = uri.find('@');
+            if (at != std::string::npos) uri = uri.substr(0, at);
+            const size_t semi = uri.find(';');
+            if (semi != std::string::npos) uri = uri.substr(0, semi);
+            return trimmed(uri);
+        }
+
+        // "METHOD request-uri SIP/2.0" -> "request-uri".
+        std::string requestUriOf(const std::string &startLine)
+        {
+            const size_t sp1 = startLine.find(' ');
+            if (sp1 == std::string::npos) return std::string();
+            const size_t sp2 = startLine.find(' ', sp1 + 1);
+            if (sp2 == std::string::npos) return std::string();
+            return startLine.substr(sp1 + 1, sp2 - sp1 - 1);
         }
     } // namespace
 
@@ -143,8 +175,165 @@ namespace Wis
         _client.close();
         _work.phase = LinkPhase::Disconnected;
         _work.registeredSinceMs = 0;
+        _openCalls.clear(); // the connection they live on is gone
+        for (auto &slot : _work.ring) slot = RingSlot();
         if (diag) setDiag(diag);
         publish();
+    }
+
+    bool Link::isKnownOutdoorStation(const std::string &stationId) const
+    {
+        for (const auto &id : _settings.doorStationIds)
+            if (id == stationId) return true;
+        return false;
+    }
+
+    void Link::publishRingTable()
+    {
+        for (auto &slot : _work.ring) slot = RingSlot();
+        for (size_t i = 0; i < _openCalls.size() && i < kMaxOpenCalls; i++)
+        {
+            RingSlot &slot = _work.ring[i];
+            slot.active = true;
+            slot.internalCall = _openCalls[i].internalCall;
+            slot.sinceMs = _openCalls[i].startedAtMs;
+            copyText(slot.stationId, sizeof(slot.stationId), _openCalls[i].stationId);
+        }
+        publish();
+    }
+
+    void Link::sendResponseTo(const SipFrame &req, int code, const char *reason)
+    {
+        _client.sendResponse(code, reason,
+                             {"Via: " + req.header("Via"), "From: " + req.header("From"), "To: " + req.header("To"),
+                              "Call-ID: " + req.header("Call-ID"), "CSeq: " + req.header("CSeq")});
+    }
+
+    void Link::handleIncomingRequest(const SipFrame &req)
+    {
+        const std::string method = req.method();
+        if (method == "INVITE")
+        {
+            handleIncomingInvite(req);
+        }
+        else if (method == "CANCEL")
+        {
+            handleIncomingCancel(req);
+        }
+        else if (method == "BYE")
+        {
+            handleIncomingBye(req);
+        }
+        else if (method == "ACK")
+        {
+            // Acknowledges our final response to an INVITE (e.g. the 487 after a
+            // CANCEL) — nothing to do, per the plan "ACK schlucken".
+        }
+        else if (method == "OPTIONS" || method == "NOTIFY")
+        {
+            sendResponseTo(req, 200, "OK");
+        }
+        else if (method == "MESSAGE")
+        {
+            // Likely door-unlock broadcasts from other clients (see the plan's
+            // "Türöffner" section) — logged for now, not acted on.
+            logInfo(kModuleTag, "eingehende MESSAGE: %s", req.body.c_str());
+            sendResponseTo(req, 200, "OK");
+        }
+        else if (!method.empty())
+        {
+            sendResponseTo(req, 501, "Not Implemented");
+        }
+    }
+
+    void Link::handleIncomingInvite(const SipFrame &req)
+    {
+        const std::string callId = req.header("Call-ID");
+        for (const auto &call : _openCalls)
+            if (call.callId == callId)
+            {
+                sendResponseTo(req, 100, "Trying"); // retransmission of an INVITE we already answered
+                return;
+            }
+
+        if (_openCalls.size() >= kMaxOpenCalls)
+        {
+            sendResponseTo(req, 486, "Busy Here");
+            logWarning(kModuleTag, "INVITE abgelehnt, bereits %u gleichzeitige Rufe offen", (unsigned)kMaxOpenCalls);
+            return;
+        }
+
+        OpenCall call;
+        call.callId = callId;
+        call.via = req.header("Via");
+        call.from = req.header("From");
+        call.to = req.header("To");
+        call.cseq = req.header("CSeq");
+        call.startedAtMs = millis();
+
+        // Plan: "Klingelnde Station = User-Teil des From-Headers, Fallback Request-URI".
+        call.stationId = sipUserPart(call.from);
+        if (call.stationId.empty()) call.stationId = sipUserPart(requestUriOf(req.startLine));
+        call.internalCall = !isKnownOutdoorStation(call.stationId);
+
+        logInfo(kModuleTag, call.internalCall ? "interner Ruf von %s (Call-ID %s), kein Kanal-KO"
+                                              : "Klingeln: Station %s (Call-ID %s)",
+               call.stationId.c_str(), callId.c_str());
+
+        _openCalls.push_back(call);
+        sendResponseTo(req, 100, "Trying");
+        publishRingTable();
+    }
+
+    void Link::handleIncomingCancel(const SipFrame &req)
+    {
+        sendResponseTo(req, 200, "OK"); // answers the CANCEL's own transaction
+
+        const std::string callId = req.header("Call-ID");
+        for (auto it = _openCalls.begin(); it != _openCalls.end(); ++it)
+        {
+            if (it->callId != callId) continue;
+            // The 487 belongs to the original INVITE transaction, not the CANCEL's.
+            _client.sendResponse(487, "Request Terminated",
+                                 {"Via: " + it->via, "From: " + it->from, "To: " + it->to, "Call-ID: " + it->callId,
+                                  "CSeq: " + it->cseq});
+            logInfo(kModuleTag, "Klingeln beendet (CANCEL): Station %s", it->stationId.c_str());
+            _openCalls.erase(it);
+            publishRingTable();
+            return;
+        }
+    }
+
+    void Link::handleIncomingBye(const SipFrame &req)
+    {
+        sendResponseTo(req, 200, "OK");
+
+        const std::string callId = req.header("Call-ID");
+        for (auto it = _openCalls.begin(); it != _openCalls.end(); ++it)
+        {
+            if (it->callId != callId) continue;
+            logInfo(kModuleTag, "Klingeln beendet (BYE): Station %s", it->stationId.c_str());
+            _openCalls.erase(it);
+            publishRingTable();
+            return;
+        }
+    }
+
+    void Link::expireStaleCalls()
+    {
+        bool changed = false;
+        for (auto it = _openCalls.begin(); it != _openCalls.end();)
+        {
+            if (millis() - it->startedAtMs > kRingTimeoutMs)
+            {
+                logWarning(kModuleTag, "Klingeln beendet (Zeitlimit): Station %s", it->stationId.c_str());
+                it = _openCalls.erase(it);
+                changed = true;
+            }
+            else
+                ++it;
+        }
+        if (changed) publishRingTable();
     }
 
     void Link::run()
@@ -205,14 +394,16 @@ namespace Wis
                 continue;
             }
 
-            // Drain any unsolicited traffic so it doesn't pile up in the buffer. Incoming
-            // INVITEs (ringing) are read here too but not yet acted on — see the plan's
-            // "Ruf-Erkennung" step, which adds the handling in this exact spot.
+            expireStaleCalls();
+
             SipFrame frame;
             bool timedOut = false;
             if (_client.tryRecvFrame(frame, 200, timedOut))
             {
-                logDebug(kModuleTag, "unbehandelte SIP-Nachricht: %s", frame.startLine.c_str());
+                if (frame.isRequest())
+                    handleIncomingRequest(frame);
+                else
+                    logDebug(kModuleTag, "unerwartete Antwort ausserhalb einer Transaktion: %s", frame.startLine.c_str());
             }
             else if (!timedOut)
             {

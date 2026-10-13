@@ -39,6 +39,10 @@ namespace Wis
 
         bool send(const std::string &method, const std::string &uri, const std::vector<std::string> &headers,
                   const std::string &body = std::string());
+        // A response ("SIP/2.0 <code> <reason>"); headers are caller-supplied complete
+        // lines (e.g. copied Via/From/To/Call-ID/CSeq from the request being answered).
+        bool sendResponse(int code, const char *reason, const std::vector<std::string> &headers,
+                          const std::string &body = std::string());
         bool sendRaw(const std::string &data);
 
         // RFC 5626 keepalive ping ("\r\n\r\n"). The matching lone "\r\n" pong (ours or an

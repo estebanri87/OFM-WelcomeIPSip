@@ -139,6 +139,7 @@ void WelcomeIPSipModule::showHelp()
     openknx.console.printHelpLine("wis unpair", "Pairing-Zustand loeschen");
     openknx.console.printHelpLine("wis connect [<Panel-IP>]", "SIP-Registrierung starten (nach erfolgtem Pairing)");
     openknx.console.printHelpLine("wis reregister", "SIP-Verbindung neu aufbauen");
+    openknx.console.printHelpLine("wis calls", "Liste gerade offener Rufe (Klingeln)");
 }
 
 bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
@@ -223,6 +224,13 @@ bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
         settings.sipUsername = p.sipUsername;
         settings.sipPassword = p.sipPassword;
         settings.sipDomain = p.sipDomain;
+        if (!p.doorsJson.empty())
+        {
+            JsonDocument doors;
+            if (!deserializeJson(doors, p.doorsJson))
+                for (JsonVariantConst d : doors.as<JsonArrayConst>())
+                    settings.doorStationIds.push_back(d["stationId"].as<std::string>());
+        }
         _link.begin(settings); // no-op if already running (first call wins)
         logInfoP("SIP-Verbindung zu %s angestossen", _testPanelHost.c_str());
         return true;
@@ -231,6 +239,21 @@ bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
     {
         _link.enqueue(Wis::Link::CMD_REREGISTER);
         logInfoP("Neuverbindung angefordert");
+        return true;
+    }
+    if (command == "wis calls")
+    {
+        Wis::LinkState link;
+        _link.snapshot(link, link.seq - 1);
+        bool any = false;
+        for (const auto &slot : link.ring)
+        {
+            if (!slot.active) continue;
+            any = true;
+            logInfoP("Station %s, %s, seit %lu s", slot.stationId, slot.internalCall ? "intern" : "extern",
+                     (unsigned long)((millis() - slot.sinceMs) / 1000));
+        }
+        if (!any) logInfoP("kein offener Ruf");
         return true;
     }
     return false;
