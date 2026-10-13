@@ -3,6 +3,7 @@
 #ifdef OPENKNX_WELCOMEIP_SIP
 
 #include "WISChannelOwnerModule.h"
+#include "WelcomeIPSipWebPage.h"
 #include "WipSipLink.h"
 #include "WipSipPairing.h"
 #include <vector>
@@ -31,9 +32,12 @@ class WelcomeIPSipModule : public WISChannelOwnerModule
     void showHelp() override;
     bool processCommand(const std::string command, bool debugKo) override;
 
+    Wis::Pairing& pairing() { return _pairing; }
     Wis::Link& link() { return _link; }
     // stationNumber is 1-based, matching the ETS parameter and the ACL door list order.
     bool doorForStation(uint8_t stationNumber, Wis::DoorInfo &out) const;
+    // -1 if no configured channel uses that station number.
+    int channelIndexForStation(uint8_t stationNumber);
 
   private:
     void printStatus();
@@ -49,6 +53,10 @@ class WelcomeIPSipModule : public WISChannelOwnerModule
     bool _lastConnected = false;
     bool _lastInternalCall = false;
     std::string _lastDiag;
+
+#if defined(OPENKNX_WEBSERVER)
+    WelcomeIPSipWebPage _webPage{*this};
+#endif
 };
 
 extern WelcomeIPSipModule openknxWelcomeIPSipModule;

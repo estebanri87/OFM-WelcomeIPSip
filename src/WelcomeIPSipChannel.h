@@ -26,6 +26,10 @@ class WelcomeIPSipChannel : public OpenKNX::Channel
     void setup() override;
     void loop() override;
 
+    // 1-based, matches ParamWIS_CHStationNumber; 0 (inactive channel) never happens for
+    // a channel object (createChannel() returns nullptr for TYPE_NONE).
+    uint8_t stationNumber() const { return _stationNumber; }
+
   private:
     WelcomeIPSipModule &_module;
     uint8_t _type = TYPE_NONE;

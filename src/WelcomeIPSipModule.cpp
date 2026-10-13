@@ -85,6 +85,10 @@ void WelcomeIPSipModule::setup(bool configured)
     settings.gatewayUuidOverride = ParamWIS_WISGatewayUuidStr;
     _pairing.begin(settings);
 
+#ifdef OPENKNX_WEBSERVER
+    _webPage.setup();
+#endif
+
     logInfoP("setup (Pairing-Task gestartet)");
 }
 
@@ -95,6 +99,19 @@ void WelcomeIPSipModule::loop(bool configured)
 
     startLinkIfReady();
     updateModuleKos();
+#ifdef OPENKNX_WEBSERVER
+    _webPage.flushLiveUpdates();
+#endif
+}
+
+int WelcomeIPSipModule::channelIndexForStation(uint8_t stationNumber)
+{
+    for (uint8_t i = 0; i < getNumberOfChannels(); i++)
+    {
+        auto *ch = static_cast<WelcomeIPSipChannel *>(getChannel(i));
+        if (ch && ch->stationNumber() == stationNumber) return i;
+    }
+    return -1;
 }
 
 void WelcomeIPSipModule::startLinkIfReady()
