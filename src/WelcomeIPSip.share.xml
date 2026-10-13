@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-model href="../../Organization/knxprod-support/knx_project_14/knx-editor.xsd" type="application/xml" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<KNX xmlns:op="http://github.com/OpenKNX/OpenKNXproducer" xmlns="http://knx.org/xml/project/14" CreatedBy="KNX MT" ToolVersion="5.1.255.16695">
+	<ManufacturerData>
+		<Manufacturer>
+			<ApplicationPrograms>
+				<ApplicationProgram>
+					<Static>
+						<ParameterTypes>
+							<ParameterType Id="%AID%_PT-WISChannelType" Name="WISChannelType">
+								<TypeRestriction Base="Value" SizeInBit="8" UIHint="DropDown">
+									<Enumeration Text="Deaktiviert" Value="0" Id="%ENID%" />
+									<Enumeration Text="Außenstation" Value="1" Id="%ENID%" />
+								</TypeRestriction>
+							</ParameterType>
+							<!-- Kanal-Tab: Typwechsel ohne "Deaktiviert", synchron zur Kanalauswahl -->
+							<ParameterType Id="%AID%_PT-WISChannelTypeSelect" Name="WISChannelTypeSelect">
+								<TypeRestriction Base="Value" SizeInBit="8" UIHint="DropDown">
+									<Enumeration Text="Außenstation" Value="1" Id="%ENID%" />
+								</TypeRestriction>
+							</ParameterType>
+						</ParameterTypes>
+						<Parameters>
+						</Parameters>
+						<ParameterRefs>
+						</ParameterRefs>
+					</Static>
+					<Dynamic>
+						<Channel Name="MainChannel%TT%" Text="WelcomeIP SIP" Number="%PREFIX%" Id="%AID%_CH-%TT%" Icon="lock-outline">
+							<ParameterBlock Id="%AID%_PB-nnn" Name="WISSettings" Text="Allgemein" Icon="cog-outline">
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Busch-Welcome IP über Cloud-Pairing und lokales SIP" UIHint="Headline" />
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Version: %ModuleVersion%" />
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="" UIHint="HorizontalRuler" />
+								<ParameterSeparator Id="%AID%_PS-nnn" Text="Pairing-Parameter und Kommunikationsobjekte folgen in einem späteren Schritt." UIHint="Information" />
+							</ParameterBlock>
+							<ParameterBlock Id="%AID%_PB-nnn" Name="WISKanalauswahl" Text="Kanalauswahl" Icon="format-list-bulleted-type" HelpContext="BASE-ChannelSelect">
+								<ParameterBlock Id="%AID%_PB-nnn" Inline="true" Layout="Grid">
+									<Rows>
+										<Row Id="%AID%_PB-nnn_R-1" />
+									</Rows>
+									<Columns>
+										<Column Id="%AID%_PB-nnn_C-1" Width="10%" />
+										<Column Id="%AID%_PB-nnn_C-2" Width="35%" />
+										<Column Id="%AID%_PB-nnn_C-3" Width="55%" />
+									</Columns>
+									<ParameterSeparator Id="%AID%_PS-nnn" Cell="1,1" UIHint="Headline" Text="Kanal" />
+									<ParameterSeparator Id="%AID%_PS-nnn" Cell="1,2" UIHint="Headline" Text="Kanaltyp" />
+									<ParameterSeparator Id="%AID%_PS-nnn" Cell="1,3" UIHint="Headline" Text="Beschreibung" />
+								</ParameterBlock>
+								<op:include href="WelcomeIPSip.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Settings']/*" type="template" prefix="WIS" IsInner="true" />
+							</ParameterBlock>
+							<op:include href="WelcomeIPSip.templ.xml" xpath="//Dynamic/ChannelIndependentBlock/ParameterBlock[@Name='Channel']/*" type="template" prefix="WIS" IsInner="true" />
+						</Channel>
+					</Dynamic>
+				</ApplicationProgram>
+			</ApplicationPrograms>
+		<Baggages>
+			<Baggage TargetPath="" Name="Help_de.zip" Id="%FILE-HELP-de%">
+				<FileInfo TimeInfo="%DATETIME%" />
+			</Baggage>
+			<Baggage TargetPath="" Name="Icons.zip" Id="%FILE-ICONS%">
+				<FileInfo TimeInfo="%DATETIME%" />
+			</Baggage>
+		</Baggages>
+		</Manufacturer>
+		</ManufacturerData>
+</KNX>
