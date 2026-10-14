@@ -4,17 +4,22 @@ OpenKNX-Modul für Busch-Welcome-IP-/ABB-Welcome-Türstationen **ohne SmartAP**,
 einmaliges Cloud-Pairing mit dem MyBuildings-Portal und danach rein lokales SIP zum Panel
 (IP-Touch / Wi-Fi-Innenstation).
 
-Das Modul meldet Klingel-Ereignisse der Außenstation(en) als KNX-Gruppenobjekte. Türöffner ist
-noch nicht umgesetzt (siehe [CHANGELOG](CHANGELOG.md)).
+Das Modul meldet Klingel-Ereignisse der Außenstation(en) als KNX-Gruppenobjekte und kann die Tür
+(und ein optionales Zweitschloss) über denselben Cloud-RPC-Aufruf öffnen, den auch die
+Original-App nutzt (XMPP/Jabber-RPC per mTLS) – siehe [CHANGELOG](CHANGELOG.md). Die genaue
+Wirkung ist bis zum ersten Test an echter Hardware nicht bestätigt.
 
 ## Features
 
 - Einmaliges Pairing gegen das MyBuildings-Portal (Zertifikat, Integritätscode, ACL-Freigabe durch
-  den Nutzer in der App) – danach läuft alles lokal, ohne weitere Cloud-Zugriffe
-- Kanäle, je Kanal eine Außenstation: Klingeln (DPT 1.001), Name der Station (DPT 16.001)
+  den Nutzer in der App)
+- Kanäle, je Kanal eine Außenstation: Klingeln (DPT 1.001), Name der Station (DPT 16.001),
+  Türöffner und Zweitschloss öffnen (je DPT 1.017, Eingang)
 - Modulweit: Verbunden/SIP registriert (DPT 1.011), Diagnose (DPT 16.001), interner Ruf, Pairing
   per KO anstoßen
-- Konsolenbefehle `wis status | pair | unpair | doors | code | reregister`
+- Klingel-Erkennung läuft rein lokal über SIP zum Panel; der Türöffner braucht dagegen bei jedem
+  Auslösen eine funktionierende Internet-/MyBuildings-Verbindung
+- Konsolenbefehle `wis status | pair | unpair | doors | code | reregister | unlock`
 
 ## Voraussetzungen
 

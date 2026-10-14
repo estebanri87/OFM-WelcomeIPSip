@@ -28,6 +28,7 @@ namespace Wis
         std::string name;
         std::string stationId;
         std::string address;
+        std::string secondUnlockAddress; // empty if this station has no second lock/gate
     };
 
     struct PairingSettings

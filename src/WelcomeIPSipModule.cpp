@@ -4,10 +4,33 @@
 #include "WelcomeIPSipModule.h"
 #include "WelcomeIPSipChannel.h"
 #include <ArduinoJson.h>
+#include <cstdlib>
 
 namespace
 {
     constexpr uint8_t kChannelCount = 4;
+
+    // Fixed cloud XMPP target for the door-unlock RPC, confirmed by a live network
+    // capture of the official app's DNS-SRV discovery (session 2026-10-14) — see the
+    // plan's "Türöffner (Schritt 8)". Not yet a dynamic SRV lookup (no need until this
+    // changes); xmppDomain is the logical service domain used in the stream and JIDs,
+    // xmppHost/xmppPort is the actual SRV-resolved connect target.
+    const char *const kXmppDomain = "xmpp.my.busch-jaeger.de";
+    const char *const kXmppHost = "srv1.xmpp.eu.mybuildings.abb.com";
+    constexpr uint16_t kXmppPort = 5222;
+
+    const char *xmppPhaseName(Wis::XmppLinkPhase phase)
+    {
+        switch (phase)
+        {
+            case Wis::XmppLinkPhase::Idle: return "bereit";
+            case Wis::XmppLinkPhase::Connecting: return "verbinde";
+            case Wis::XmppLinkPhase::Unlocking: return "entsperre";
+            case Wis::XmppLinkPhase::Done: return "fertig";
+            case Wis::XmppLinkPhase::Error: return "Fehler";
+        }
+        return "?";
+    }
 
     const char *phaseName(Wis::Phase phase)
     {
@@ -62,7 +85,7 @@ const std::string WelcomeIPSipModule::version()
 #ifdef MODULE_WelcomeIPSip_Version
     return MODULE_WelcomeIPSip_Version;
 #else
-    return "0.1.0";
+    return "0.2.0";
 #endif
 }
 
@@ -98,6 +121,7 @@ void WelcomeIPSipModule::loop(bool configured)
     if (!configured || !moduleEnabled()) return;
 
     startLinkIfReady();
+    startXmppLinkIfReady();
     updateModuleKos();
 #ifdef OPENKNX_WEBSERVER
     _webPage.flushLiveUpdates();
@@ -132,6 +156,7 @@ void WelcomeIPSipModule::startLinkIfReady()
                 door.name = d["name"].as<std::string>();
                 door.stationId = d["stationId"].as<std::string>();
                 door.address = d["address"].as<std::string>();
+                door.secondUnlockAddress = d["secondUnlockAddress"].as<std::string>();
                 _doors.push_back(door);
             }
     }
@@ -152,6 +177,26 @@ void WelcomeIPSipModule::startLinkIfReady()
     _link.begin(link);
     _linkStarted = true;
     logInfoP("SIP-Link gestartet (%u Tueren aus der ACL)", (unsigned)_doors.size());
+}
+
+void WelcomeIPSipModule::startXmppLinkIfReady()
+{
+    if (_xmppLinkStarted || !_pairing.hasSipCredentials()) return;
+
+    Wis::PersistedPairing p;
+    if (!_pairing.store().load(p) || p.certPem.empty() || p.privateKeyPem.empty() || p.gatewayUuid.empty()) return;
+
+    Wis::XmppLinkSettings settings;
+    settings.xmppHost = kXmppHost;
+    settings.xmppPort = kXmppPort;
+    settings.xmppDomain = kXmppDomain;
+    settings.certPem = p.certPem;
+    settings.privateKeyPem = p.privateKeyPem;
+    settings.gatewayUuid = p.gatewayUuid;
+
+    _xmppLink.begin(settings);
+    _xmppLinkStarted = true;
+    logInfoP("Tueroeffner-Client bereit");
 }
 
 bool WelcomeIPSipModule::doorForStation(uint8_t stationNumber, Wis::DoorInfo &out) const
@@ -230,6 +275,16 @@ void WelcomeIPSipModule::printStatus()
         logInfoP("registriert seit %lu s, Heap-Minimum %u Byte", (unsigned long)((millis() - link.registeredSinceMs) / 1000),
                  (unsigned)link.minFreeHeapSeen);
     if (link.reconnectCount) logInfoP("Reconnects seit Start: %u", (unsigned)link.reconnectCount);
+
+    Wis::XmppLinkState xmpp;
+    _xmppLink.snapshot(xmpp, xmpp.seq - 1);
+    if (xmpp.phase != Wis::XmppLinkPhase::Idle || xmpp.lastFinishedAtMs)
+    {
+        logInfoP("Tueroeffner: %s (%s)", xmppPhaseName(xmpp.phase), xmpp.diag);
+        if (xmpp.lastStationId[0])
+            logInfoP("letzte Station %s, resultCode %d%s%s", xmpp.lastStationId, xmpp.lastResultCode,
+                     xmpp.lastError[0] ? ", Fehler: " : "", xmpp.lastError);
+    }
 }
 
 void WelcomeIPSipModule::printDoors()
@@ -265,6 +320,7 @@ void WelcomeIPSipModule::showHelp()
     openknx.console.printHelpLine("wis unpair", "Pairing-Zustand loeschen");
     openknx.console.printHelpLine("wis reregister", "SIP-Verbindung neu aufbauen");
     openknx.console.printHelpLine("wis calls", "Liste gerade offener Rufe (Klingeln)");
+    openknx.console.printHelpLine("wis unlock <Stationsnummer> [2]", "Tueroeffner auslösen (2 = Zweitschloss)");
 }
 
 bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
@@ -322,6 +378,33 @@ bool WelcomeIPSipModule::processCommand(const std::string command, bool debugKo)
                      (unsigned long)((millis() - slot.sinceMs) / 1000));
         }
         if (!any) logInfoP("kein offener Ruf");
+        return true;
+    }
+    if (command.rfind("wis unlock", 0) == 0)
+    {
+        const char *args = command.c_str() + strlen("wis unlock");
+        char *afterStation = nullptr;
+        const unsigned station = (unsigned)strtoul(args, &afterStation, 10);
+        char *afterLock = nullptr;
+        const unsigned long parsedLock = strtoul(afterStation, &afterLock, 10);
+        const unsigned lockIndex = afterLock != afterStation ? (unsigned)parsedLock : 1;
+
+        Wis::DoorInfo door;
+        if (station == 0 || !doorForStation((uint8_t)station, door))
+        {
+            logErrorP("wis unlock: unbekannte Stationsnummer %u", station);
+            return true;
+        }
+        const std::string &contactId = lockIndex == 2 ? door.secondUnlockAddress : door.address;
+        if (contactId.empty())
+        {
+            logErrorP("wis unlock: Station %u hat kein Schloss %u", station, lockIndex);
+            return true;
+        }
+        if (_xmppLink.enqueue(Wis::XmppLink::CMD_UNLOCK, contactId, door.stationId, (uint8_t)lockIndex))
+            logInfoP("Tueroeffner angefordert: Station %u, Schloss %u", station, lockIndex);
+        else
+            logErrorP("wis unlock: konnte nicht angefordert werden");
         return true;
     }
     return false;

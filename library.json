@@ -1,6 +1,6 @@
 {
     "name": "OFM-WelcomeIPSip",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "Busch-Welcome IP (ABB-Welcome) door bell and door station on the KNX bus via one-time MyBuildings cloud pairing and local SIP, without a SmartAP",
     "homepage": "https://openknx.de",
     "authors": {

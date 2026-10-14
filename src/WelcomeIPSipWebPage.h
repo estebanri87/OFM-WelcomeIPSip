@@ -3,6 +3,7 @@
 #if defined(OPENKNX_WEBSERVER) && (defined(KNX_IP_WIFI) || defined(KNX_IP_LAN))
 
 #include "WipSipLink.h"
+#include "WipXmppLink.h"
 #include <cstdint>
 #include <string>
 
@@ -38,6 +39,7 @@ class WelcomeIPSipWebPage
     void handleStatus(OpenKNX::Network::WebRequest &req, OpenKNX::Network::WebResponse &res);
     void handlePair(OpenKNX::Network::WebRequest &req, OpenKNX::Network::WebResponse &res);
     void handleUnpair(OpenKNX::Network::WebRequest &req, OpenKNX::Network::WebResponse &res);
+    void handleUnlock(OpenKNX::Network::WebRequest &req, OpenKNX::Network::WebResponse &res);
     void handleWsConnect(int clientId, bool connected);
     void sendLiveSnapshot(int clientId);
     std::string buildRingJson(const Wis::LinkState &link) const;

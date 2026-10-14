@@ -150,6 +150,7 @@ namespace Wis
                 }
                 const std::string *name = sec.find("name");
                 door.name = name && !name->empty() ? *name : !localId.empty() ? localId : sec.name;
+                if (const std::string *second = sec.find("secondunlock")) door.secondUnlockAddress = *second;
                 doors.push_back(door);
             }
         }
@@ -629,6 +630,7 @@ namespace Wis
             o["name"] = d.name;
             o["stationId"] = d.stationId;
             o["address"] = d.address;
+            o["secondUnlockAddress"] = d.secondUnlockAddress;
         }
         std::string doorsJson;
         serializeJson(doorsDoc, doorsJson);

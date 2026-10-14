@@ -11,7 +11,9 @@ Das Pairing selbst läuft nicht über die ETS, sondern über die Gerätekonsole 
 `wis status`, `wis code`, `wis doors`, `wis unpair`) oder das Objekt "Pairing starten". Die
 ETS-Parameter dieser Seite legen nur die dafür nötigen Zugangsdaten und die Kanäle fest.
 
-Türöffner ist noch nicht umgesetzt (siehe [CHANGELOG](../CHANGELOG.md)).
+Türöffner und Zweitschloss lösen den Cloud-RPC-Aufruf aus, den auch die Original-App für das
+Entsperren nutzt (XMPP/Jabber-RPC per mTLS). Die genaue Wirkung ist bis zum ersten Test an
+echter Hardware nicht bestätigt (siehe [CHANGELOG](../CHANGELOG.md)).
 
 ---
 
@@ -27,6 +29,8 @@ Türöffner ist noch nicht umgesetzt (siehe [CHANGELOG](../CHANGELOG.md)).
   - [Objekte](#objekte)
   - [Kanaltyp](#kanaltyp)
   - [Stationsnummer](#stationsnummer)
+  - [Türöffner](#türöffner)
+  - [Zweitschloss öffnen](#zweitschloss-öffnen)
 
 ---
 
@@ -131,5 +135,26 @@ Die Außenstation dieses Kanals, als Position in der Türliste, die das Pairing 
 ausliest (1 = erste Station). Die Konsole zeigt diese Liste mit Nummer, Namen und `station_id`
 über den Befehl `wis doors`. Passt die Nummer nicht mehr zu einer vorhandenen Station (z. B. nach
 einer Änderung in der Anlage), meldet das Modul das als Diagnose und im Log.
+
+<!-- DOCEND -->
+
+<!-- DOC HelpContext="Tueroeffner" -->
+## Türöffner
+
+Löst für diese Außenstation den Cloud-Aufruf aus, der in der Original-App das Entsperren der
+Tür bewirkt (XMPP/Jabber-RPC, `RemoteInterface.unlockCloudContact`). Jedes empfangene
+Telegramm löst den Vorgang aus, unabhängig vom Wert.
+
+Anders als das Klingel-Objekt braucht der Türöffner immer eine funktionierende
+Internet-/MyBuildings-Verbindung, auch wenn das lokale Panel erreichbar ist.
+
+<!-- DOCEND -->
+
+<!-- DOC HelpContext="Zweitschloss" -->
+## Zweitschloss öffnen
+
+Wie "Türöffner", aber für ein zweites Schloss oder Tor an derselben Außenstation. Nur
+Stationen mit einem konfigurierten Zweitschloss reagieren darauf; bei allen anderen hat
+dieses Objekt keine Wirkung (im Log erscheint dann ein Hinweis).
 
 <!-- DOCEND -->

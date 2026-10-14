@@ -7,6 +7,7 @@
 #include "OpenKNX/Network/Webserver/WebResponse.h"
 #include "OpenKNX/Network/Webserver/Webserver.h"
 #include "WelcomeIPSipModule.h"
+#include <cstdlib>
 #include <cstring>
 
 using namespace OpenKNX::Network;
@@ -81,6 +82,7 @@ void WelcomeIPSipWebPage::setup()
     openknxNetwork.webserver.addRoute(WEB_GET, "/wis", [this](WebRequest &req, WebResponse &res) { handleStatus(req, res); });
     openknxNetwork.webserver.addRoute(WEB_GET, "/wis/pair", [this](WebRequest &req, WebResponse &res) { handlePair(req, res); });
     openknxNetwork.webserver.addRoute(WEB_GET, "/wis/unpair", [this](WebRequest &req, WebResponse &res) { handleUnpair(req, res); });
+    openknxNetwork.webserver.addRoute(WEB_GET, "/wis/unlock", [this](WebRequest &req, WebResponse &res) { handleUnlock(req, res); });
 
     openknxNetwork.webserver.addSocket(
         "/ws/wis",
@@ -128,7 +130,7 @@ void WelcomeIPSipWebPage::handleStatus(WebRequest &req, WebResponse &res)
     html += "</p>";
 
     html += "<h2>Stationen</h2><table class='attribute-table'><tbody>";
-    html += "<tr><th>Nr</th><th>Name</th><th>Kanal</th><th>Klingeln</th></tr>";
+    html += "<tr><th>Nr</th><th>Name</th><th>Kanal</th><th>Klingeln</th><th>Türöffner</th></tr>";
     Wis::DoorInfo door;
     for (uint8_t n = 1; _module.doorForStation(n, door); n++)
     {
@@ -149,9 +151,29 @@ void WelcomeIPSipWebPage::handleStatus(WebRequest &req, WebResponse &res)
         html += "<td class='wis-ring'>" + std::string(ringing ? "<span class='yellow'>klingelt (" + elapsedText(ringSince) + ")</span>"
                                                               : "-") +
                 "</td>";
+        html += "<td>";
+        if (!door.address.empty())
+            html += "<a href='/wis/unlock?station=" + std::to_string(n) + "'>Entsperren</a>";
+        if (!door.secondUnlockAddress.empty())
+            html += "&nbsp;&nbsp;<a href='/wis/unlock?station=" + std::to_string(n) + "&lock=2'>Zweitschloss</a>";
+        html += "</td>";
         html += "</tr>";
     }
     html += "</tbody></table>";
+
+    Wis::XmppLinkState xmpp;
+    _module.xmppLink().snapshot(xmpp, xmpp.seq - 1);
+    if (xmpp.phase != Wis::XmppLinkPhase::Idle || xmpp.lastFinishedAtMs)
+    {
+        const bool ok = xmpp.phase == Wis::XmppLinkPhase::Done && xmpp.lastResultCode == 0;
+        const bool failed = xmpp.phase == Wis::XmppLinkPhase::Error ||
+                             (xmpp.phase == Wis::XmppLinkPhase::Done && xmpp.lastResultCode != 0);
+        html += "<p>Letzter Türöffner-Versuch: Station <code>" + htmlEscape(xmpp.lastStationId) + "</code>, ";
+        html += "<span class='" + std::string(ok ? "green" : failed ? "red" : "yellow") + "'>" + htmlEscape(xmpp.diag) +
+                "</span>";
+        if (xmpp.lastError[0]) html += " (" + htmlEscape(xmpp.lastError) + ")";
+        html += "</p>";
+    }
     html += "<p id='wis-live-status' class='yellow'>Live-Anzeige verbindet…</p>";
 
     html += "<script>"
@@ -196,6 +218,31 @@ void WelcomeIPSipWebPage::handleUnpair(WebRequest &req, WebResponse &res)
     (void)req;
     _module.pairing().enqueue(Wis::Pairing::CMD_UNPAIR);
     sendMetaRefresh(res, "Unpair angestoßen", "Der Portal-Eintrag bleibt bestehen und muss dort manuell entfernt werden.");
+}
+
+void WelcomeIPSipWebPage::handleUnlock(WebRequest &req, WebResponse &res)
+{
+    const std::string stationStr = req.getQueryParam("station");
+    const std::string lockStr = req.getQueryParam("lock");
+    const unsigned station = stationStr.empty() ? 0 : (unsigned)strtoul(stationStr.c_str(), nullptr, 10);
+    const unsigned lockIndex = lockStr.empty() ? 1 : (unsigned)strtoul(lockStr.c_str(), nullptr, 10);
+
+    Wis::DoorInfo door;
+    if (station == 0 || !_module.doorForStation((uint8_t)station, door))
+    {
+        sendMetaRefresh(res, "Unbekannte Station", "Keine passende Außenstation gefunden.");
+        return;
+    }
+    const std::string &contactId = lockIndex == 2 ? door.secondUnlockAddress : door.address;
+    if (contactId.empty())
+    {
+        sendMetaRefresh(res, "Kein Zweitschloss", "Diese Station hat kein konfiguriertes Zweitschloss.");
+        return;
+    }
+    if (_module.xmppLink().enqueue(Wis::XmppLink::CMD_UNLOCK, contactId, door.stationId, (uint8_t)lockIndex))
+        sendMetaRefresh(res, "Türöffner angefordert", "Weiterleitung auf die Statusseite in 3 Sekunden…");
+    else
+        sendMetaRefresh(res, "Türöffner nicht angefordert", "Verbindung noch nicht bereit, bitte erneut versuchen.");
 }
 
 void WelcomeIPSipWebPage::handleWsConnect(int clientId, bool connected)

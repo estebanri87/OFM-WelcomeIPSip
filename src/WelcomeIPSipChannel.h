@@ -25,12 +25,15 @@ class WelcomeIPSipChannel : public OpenKNX::Channel
     const std::string name() override;
     void setup() override;
     void loop() override;
+    void processInputKo(GroupObject &ko) override;
 
     // 1-based, matches ParamWIS_CHStationNumber; 0 (inactive channel) never happens for
     // a channel object (createChannel() returns nullptr for TYPE_NONE).
     uint8_t stationNumber() const { return _stationNumber; }
 
   private:
+    bool debounceUnlock(uint8_t lockIndex); // true if this trigger is allowed through (see kUnlockBlockMs)
+
     WelcomeIPSipModule &_module;
     uint8_t _type = TYPE_NONE;
     uint8_t _stationNumber = 1; // 1-based position in the ACL door list (ParamWIS_CHStationNumber)
@@ -41,6 +44,8 @@ class WelcomeIPSipChannel : public OpenKNX::Channel
 
     bool _ringActive = false;   // current level of the Klingeln KO (hold mode) / edge-armed (pulse mode)
     uint32_t _pulseStartedAtMs = 0;
+
+    uint32_t _lastUnlockMs[2] = {0, 0}; // index 0 = Türöffner, 1 = Zweitschloss
 };
 
 #endif // OPENKNX_WELCOMEIP_SIP
