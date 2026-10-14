@@ -31,7 +31,15 @@ namespace Wis
     {
         std::string xmppHost; // SRV-resolved connect target (e.g. srv1.xmpp.eu.mybuildings.abb.com)
         uint16_t xmppPort = 5222;
-        std::string xmppDomain; // logical XMPP service domain for the stream and JIDs (e.g. xmpp.my.busch-jaeger.de)
+        // Stream-negotiation domain only ("to=" of the initial <stream:stream>, pure vhost
+        // selection before authentication) — e.g. xmpp.my.busch-jaeger.de. NOT necessarily
+        // the domain JIDs live under after bind; see jidDomain below.
+        std::string xmppDomain;
+        // Domain used for actual JID addressing (the unlock IQ's "to"). Confirmed from a
+        // live capture of the official app's own client certificate (its bare JID's
+        // domain), which differs from xmppDomain — e.g. xmpp.my.abb-livingspace.com, the
+        // real backend domain behind the busch-jaeger.de-branded vhost.
+        std::string jidDomain;
         std::string certPem;
         std::string privateKeyPem;
         // Local part of the unlock IQ's "to" JID — working hypothesis, see the plan:

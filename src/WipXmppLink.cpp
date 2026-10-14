@@ -103,7 +103,7 @@ namespace Wis
             setDiag("Entsperren...");
             publish();
 
-            const std::string to = _settings.gatewayUuid + "@" + _settings.xmppDomain;
+            const std::string to = _settings.gatewayUuid + "@" + _settings.jidDomain;
             XmppRpcResult result = _client.sendUnlock(to, cmd.contactId, kRpcTimeoutMs);
             _client.close();
 

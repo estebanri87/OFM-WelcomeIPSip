@@ -13,11 +13,16 @@ namespace
     // Fixed cloud XMPP target for the door-unlock RPC, confirmed by a live network
     // capture of the official app's DNS-SRV discovery (session 2026-10-14) — see the
     // plan's "Türöffner (Schritt 8)". Not yet a dynamic SRV lookup (no need until this
-    // changes); xmppDomain is the logical service domain used in the stream and JIDs,
-    // xmppHost/xmppPort is the actual SRV-resolved connect target.
-    const char *const kXmppDomain = "xmpp.my.busch-jaeger.de";
+    // changes); xmppHost/xmppPort is the actual SRV-resolved connect target.
     const char *const kXmppHost = "srv1.xmpp.eu.mybuildings.abb.com";
     constexpr uint16_t kXmppPort = 5222;
+    // Stream-negotiation domain (pure vhost selection before auth) — distinct from the
+    // domain JIDs actually live under, see kXmppJidDomain and WipXmppLink.h.
+    const char *const kXmppDomain = "xmpp.my.busch-jaeger.de";
+    // Confirmed from the live capture's own client certificate (its bare JID's domain) —
+    // the real backend domain behind the busch-jaeger.de-branded vhost, used to address
+    // the gateway JID in the unlock IQ's "to".
+    const char *const kXmppJidDomain = "xmpp.my.abb-livingspace.com";
 
     const char *xmppPhaseName(Wis::XmppLinkPhase phase)
     {
@@ -190,6 +195,7 @@ void WelcomeIPSipModule::startXmppLinkIfReady()
     settings.xmppHost = kXmppHost;
     settings.xmppPort = kXmppPort;
     settings.xmppDomain = kXmppDomain;
+    settings.jidDomain = kXmppJidDomain;
     settings.certPem = p.certPem;
     settings.privateKeyPem = p.privateKeyPem;
     settings.gatewayUuid = p.gatewayUuid;
